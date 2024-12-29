@@ -5,13 +5,6 @@ from sys import argv, exit
 import pyqtgraph as pg
 from pyqtgraph import QtCore, QtWidgets, QtGui
 
-MIN_DX = -15
-MAX_DX = 15
-MAX_THETA = np.pi
-MIN_THETA = -np.pi
-MAX_DTHETA = 1.1
-MIN_DTHETA = 0
-
 class InvertedPendulum(QtWidgets.QWidget):
     '''Inicjalizacja stałych:
     M - masa wózka
@@ -134,17 +127,7 @@ class InvertedPendulum(QtWidgets.QWidget):
     def single_loop_run(self):
         for i in range(self.frameskip+1):
             dis=next(self.disruption, 0)
-
-            # print(f"Polozenie wozka : {self.x}, predkosc wozka : {self.dx}, polozenie kątowe wahadla : {self.theta}, predkosc kątowa wahadla : {self.dtheta}")
-            # norm_x = self.normalize_inputs(self.x, MIN_X, MAX_X)
-            # norm_dx = self.normalize_inputs(self.dx, self.x_min, self.x_max)
-            # norm_theta = self.normalize_inputs(self.theta, MIN_THETA, MAX_THETA)
-            # norm_dtheta = self.normalize_inputs(self.dtheta, -np.pi, np.pi)
-
-            # control = self.fuzzy_control(norm_x, norm_theta, norm_dx, norm_dtheta)
             control = self.fuzzy_control(self.x, self.theta, self.dx, self.dtheta)
-            # print(f"Znormalizowane wartosci: x: {norm_x}, dx: {norm_dx}, theta: {norm_theta}, dtheta: {norm_dtheta}")
-
             F = dis+control
             self.count_state_params(F)
             if not self.sandbox:
@@ -152,112 +135,9 @@ class InvertedPendulum(QtWidgets.QWidget):
                     exit(1)
         self.update()
         
+    # Regulator rozmyty, który trzeba zaimplementować
     def fuzzy_control(self, x, theta, dx, dtheta):
-        fuzzy_inputs = self.fuzzify(x, theta, dx, dtheta)
-        fuzzy_output = self.inference(fuzzy_inputs)
-        output = self.defuzzify(fuzzy_output)
-        # return 0
-        return output
-
-    def fuzzify(self, x, theta, dx, dtheta):
-        fuzzy_values = {
-            'x':      self.fuzzify_x(x),
-            'theta':  self.fuzzify_theta(theta),
-            'dx':     self.fuzzify_dx(dx),
-            'dtheta': self.fuzzify_dtheta(dtheta)
-        }
-        return fuzzy_values
-
-    def fuzzify_x(self, x):
-        # print(f"X: {x}")
-        fuzzy_x = {
-            'negative': self.triangle_membership(x, -self.x_max, -self.x_max/2, 0),
-            'zero': self.triangle_membership(x, -self.x_max/2, 0, self.x_max/2),
-            'positive': self.triangle_membership(x, 0, self.x_max/2, self.x_max)
-        }
-        # print(f"Fuzzy x: {fuzzy_x}")
-        return fuzzy_x
-
-    def fuzzify_theta(self, theta):
-        fuzzy_theta = {
-            'negative': self.triangle_membership(theta, -MAX_THETA, -MAX_THETA/2, 0),
-            'zero': self.triangle_membership(theta, -MAX_THETA/2, 0, MAX_THETA/2),
-            'positive': self.triangle_membership(theta, 0, MAX_THETA/2, MAX_THETA)
-        }
-        return fuzzy_theta
-
-    def fuzzify_dx(self, dx):
-        fuzzy_dx = {
-            'negative': self.triangle_membership(dx, MIN_DX, MIN_DX/2, 0),
-            'zero': self.triangle_membership(dx, MIN_DX/2, 0, MAX_DX/2),
-            'positive': self.triangle_membership(dx, 0, MAX_DX/2, MAX_DX)
-        }
-        return fuzzy_dx
-
-    def fuzzify_dtheta(self, dtheta):
-        # print(f"Dtheta: {dtheta}")
-        fuzzy_dtheta = {
-            'low': self.triangle_membership(dtheta, MIN_DTHETA, MAX_DTHETA/4, MAX_DTHETA/2),
-            'high': self.triangle_membership(dtheta, MAX_DTHETA/2, 3*(MAX_DTHETA/4), MAX_DTHETA)
-        }
-        return fuzzy_dtheta
-
-    def triangle_membership(self, value, a, b, c):
-        if a <= value <= b:
-            return (value - a) / (b - a)
-        elif b <= value <= c:
-            return (c - value) / (c - b)
-        else:
-            return 0
-
-    def inference(self, fuzzy_inputs):
-        rules = [
-            (min(fuzzy_inputs['x']['negative'], fuzzy_inputs['dx']['negative']), 'positive_large'),
-            (min(fuzzy_inputs['x']['negative'], fuzzy_inputs['dx']['positive']), 'zero'),
-            (min(fuzzy_inputs['x']['positive'], fuzzy_inputs['dx']['negative']), 'zero'),
-            (min(fuzzy_inputs['x']['positive'], fuzzy_inputs['dx']['positive']), 'negative_large'),
-
-            # (min(fuzzy_inputs['x']['negative'], fuzzy_inputs['theta']['negative']), 'positive_large'),
-            # (min(fuzzy_inputs['x']['negative'], fuzzy_inputs['theta']['zero']), 'positive_small'),
-            # (min(fuzzy_inputs['x']['negative'], fuzzy_inputs['theta']['positive']), 'positive_small'),
-            # (min(fuzzy_inputs['x']['zero'], fuzzy_inputs['theta']['negative']), 'positive_small'),
-            # (min(fuzzy_inputs['x']['zero'], fuzzy_inputs['theta']['zero']), 'zero'),
-            # (min(fuzzy_inputs['x']['zero'], fuzzy_inputs['theta']['positive']), 'negative_small'),
-            # (min(fuzzy_inputs['x']['positive'], fuzzy_inputs['theta']['negative']), 'negative_small'),
-            # (min(fuzzy_inputs['x']['positive'], fuzzy_inputs['theta']['zero']), 'negative_small'),
-            # (min(fuzzy_inputs['x']['positive'], fuzzy_inputs['theta']['positive']), 'negative_large'),
-
-            (min(fuzzy_inputs['theta']['negative'], fuzzy_inputs['dtheta']['high']), 'positive_small'),
-            (min(fuzzy_inputs['theta']['positive'], fuzzy_inputs['dtheta']['low']), 'negative_small'),
-
-            (min(fuzzy_inputs['theta']['negative'], fuzzy_inputs['dtheta']['low']), 'positive_large'),
-            (min(fuzzy_inputs['theta']['negative'], fuzzy_inputs['dtheta']['high']), 'positive_small'),
-            (min(fuzzy_inputs['theta']['zero'], fuzzy_inputs['dtheta']['low']), 'positive_small'),
-            (min(fuzzy_inputs['theta']['zero'], fuzzy_inputs['dtheta']['high']), 'negative_small'),
-            (min(fuzzy_inputs['theta']['positive'], fuzzy_inputs['dtheta']['low']), 'negative_small'),
-            (min(fuzzy_inputs['theta']['positive'], fuzzy_inputs['dtheta']['high']), 'negative_large')
-        ]
-
-        fuzzy_output = {'negative_large': 0, 'negative_small': 0, 'zero': 0, 'positive_small': 0, 'positive_large': 0}
-        for rule_strength, output_label in rules:
-            fuzzy_output[output_label] = max(fuzzy_output[output_label], rule_strength)
-
-        # print(f"Fuzzy output: {fuzzy_output}")
-
-        return fuzzy_output
-
-    def defuzzify(self, fuzzy_output):
-        """ Defuzzification """
-        output_values = {'negative_large': -4, 'negative_small': -2, 'zero': 0, 'positive_small': 2, 'positive_large': 4}
-        numerator = sum(value * output_values[key] for key, value in fuzzy_output.items())
-        denominator = sum(fuzzy_output.values())
-        output =  numerator / denominator if denominator != 0 else 0
-        print(f"Output: {output}")
-        return output
-
-    def normalize_inputs(self, value, min_val, max_val):
-        """ Normalization of input values """ # Mistake normalizing 0 to 1
-        return (value - min_val) / (max_val - min_val)
+        return 0
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(argv)
